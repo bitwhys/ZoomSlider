@@ -4,7 +4,7 @@
  *
  * Licensed under the MIT license.
  * http://www.opensource.org/licenses/mit-license.php
- * 
+ *
  * Copyright 2015, Codrops
  * http://www.codrops.com
  */
@@ -12,7 +12,7 @@
 
 	'use strict';
 
-	var bodyEl = document.body, 
+	var bodyEl = document.body,
 		docElem = window.document.documentElement,
 		support = { transitions: Modernizr.csstransitions },
 		// transition end event name
@@ -57,7 +57,25 @@
 		isOpen = false,
 		isFirefox = typeof InstallTrigger !== 'undefined',
 		// scale body when zooming into the items, if not Firefox (the performance in Firefox is not very good)
-		bodyScale = isFirefox ? false : 3;
+		bodyScale = isFirefox ? false : 3,
+		// list of contents id
+		contentList = items.map(function(item) {
+			return item.getAttribute('data-content');
+		}),
+		// Does this request matches a page navigation (= true) or insted a direct browser navigation (=false) ?
+		naturalRequest = false,
+		// current view : 'slider' or 'zoom'
+		currentView = 'slider',
+		// current content id
+		currentContent = contentList[current],
+		// index of required item
+		required = current,
+		// required view : 'slider' or 'zoom'
+		requiredView = currentView,
+		// required content id
+		requiredContent = currentContent,
+		// First time page is rendered
+		firstRendering = true;
 
 	// some helper functions:
 	function scrollX() { return window.pageXOffset || docElem.scrollLeft; }
@@ -76,6 +94,8 @@
 	}
 
 	function init() {
+		// directly execute router for first rendering
+		router();
 		initEvents();
 	}
 
@@ -83,15 +103,21 @@
 	function initEvents() {
 		// open items
 		zoomCtrl.addEventListener('click', function() {
-			openItem(items[current]);
+			window.location.hash = '#zoom/' + currentContent;
 		});
 
 		// close content
-		closeContentCtrl.addEventListener('click', closeContent);
+		closeContentCtrl.addEventListener('click', function() {
+			window.location.hash = '#slider/' + currentContent;
+		});
 
 		// navigation
-		navRightCtrl.addEventListener('click', function() { navigate('right'); });
-		navLeftCtrl.addEventListener('click', function() { navigate('left'); });
+		navRightCtrl.addEventListener('click', function() {
+			window.location.hash = '#slider/' + contentList[current === itemsTotal - 1 ? 0 : current + 1];
+		});
+		navLeftCtrl.addEventListener('click', function() {
+			window.location.hash = '#slider/' + contentList[current === 0 ? itemsTotal - 1 : current - 1];
+		});
 
 		// window resize
 		window.addEventListener('resize', throttle(function(ev) {
@@ -108,15 +134,22 @@
 
 		// keyboard navigation events
 		document.addEventListener( 'keydown', function( ev ) {
-			if( isOpen ) return; 
 			var keyCode = ev.keyCode || ev.which;
-			switch (keyCode) {
-				case 37:
-					navigate('left');
-					break;
-				case 39:
-					navigate('right');
-					break;
+			if (!isOpen) {
+				switch (keyCode) {
+					case 37:
+						window.location.hash = '#slider/' + contentList[current === 0 ? itemsTotal - 1 : current - 1];
+						break;
+					case 39:
+						window.location.hash = '#slider/' + contentList[current === itemsTotal - 1 ? 0 : current + 1];
+						break;
+				}
+			} else {
+				switch (keyCode) {
+					case 27:
+						window.location.hash = '#slider/' + currentContent;
+						break;
+				}
 			}
 		} );
 	}
@@ -144,7 +177,7 @@
 			if( bodyScale ) {
 				dynamics.stop(bodyEl);
 				dynamics.css(bodyEl, { scale: 1 });
-				
+
 				// fix for safari (allowing fixed children to keep position)
 				bodyEl.style.WebkitTransform = 'none';
 				bodyEl.style.transform = 'none';
@@ -172,7 +205,7 @@
 		classie.remove(contentEl, 'content--open');
 		classie.remove(contentItem, 'content__item--current');
 		classie.remove(bodyEl, 'noscroll');
-				
+
 		if( bodyScale ) {
 			// reset fix for safari (allowing fixed children to keep position)
 			bodyEl.style.WebkitTransform = '';
@@ -187,7 +220,7 @@
 		// wait for the inner content to finish the transition
 		onEndTransition(contentItem, function(ev) {
 			classie.remove(this, 'content__item--reset');
-			
+
 			// reset scrolling permission
 			lockScroll = false;
 			scrollContainer.removeEventListener('scroll', noscroll);
@@ -196,12 +229,12 @@
 			zoomer.style.WebkitTransform = 'translate3d(0,0,0) scale3d(1,1,1)';
 			zoomer.style.transform = 'translate3d(0,0,0) scale3d(1,1,1)';
 			/* fix for safari flickering */
-			
+
 			// scale up - behind the scenes - the item again (without transition)
 			applyTransforms(zoomer);
-			
+
 			// animate/scale down the item
-			setTimeout(function() {	
+			setTimeout(function() {
 				classie.remove(zoomer, 'zoomer--notrans');
 				classie.remove(zoomer, 'zoomer--active');
 				zoomer.style.WebkitTransform = 'translate3d(0,0,0) scale3d(1,1,1)';
@@ -223,13 +256,13 @@
 	// applies the necessary transform value to scale the item up
 	function applyTransforms(el, nobodyscale) {
 		// zoomer area and scale value
-		var zoomerArea = el.querySelector('.zoomer__area'), 
+		var zoomerArea = el.querySelector('.zoomer__area'),
 			zoomerAreaSize = {width: zoomerArea.offsetWidth, height: zoomerArea.offsetHeight},
 			zoomerOffset = zoomerArea.getBoundingClientRect(),
 			scaleVal = zoomerAreaSize.width/zoomerAreaSize.height < win.width/win.height ? win.width/zoomerAreaSize.width : win.height/zoomerAreaSize.height;
 
 		if( bodyScale && !nobodyscale ) {
-			scaleVal /= bodyScale; 
+			scaleVal /= bodyScale;
 		}
 
 		// apply transform
@@ -254,7 +287,7 @@
 		var itemNext = items[current],
 			nextEl = itemNext.querySelector('.slide__mover'),
 			nextTitleEl = itemNext.querySelector('.slide__title');
-		
+
 		// animate the current element out
 		dynamics.animate(currentEl, { opacity: 0, translateX: dir === 'right' ? -1*currentEl.offsetWidth/2 : currentEl.offsetWidth/2, rotateZ: dir === 'right' ? -10 : 10 }, {
 			type: dynamics.spring,
@@ -308,6 +341,102 @@
 		scrollContainer.scrollLeft = xscroll;
 	}
 
+	// Router will be executed everytime url changes
+	function router() {
+		// get request
+		var query = decodeURI(window.location.hash).substr(1);
+		var params;
+
+		// define a util function that allows to switch from a slide to any other
+		var switchSlide = function () {
+			items.forEach(function(item) { classie.remove(item, 'slide--current'); });
+			items.forEach(function(item) { item.removeAttribute('style'); });
+			var children = Array.prototype.slice.call(items[required].children);
+			children.forEach(function(child) { child.removeAttribute('style'); });
+			classie.add(items[required], 'slide--current');
+		}
+
+		// what are the requested view & content ?
+		if (query.length > 0) {
+			params = query.split('/');
+			// is the query relevant ?
+			if((params[0] === 'zoom' || params[0] === 'slider') && (contentList.indexOf(params[1]) > -1)) {
+				requiredView = params[0];
+				requiredContent = params[1];
+				required = contentList.indexOf(requiredContent);
+			} else {
+				// If the query is not relevant, reinit state & go back to default page
+				currentView = 'slider';
+				current = 0;
+				currentContent = contentList[0];
+				window.location.hash = currentView + '/' + currentContent;
+				return;
+			}
+		}
+
+		// Identify if request is triggered by supported event or else from a direct browser interaction ?
+		if ((requiredView !== currentView && current === required) || // open items or close content action ?
+			((requiredView === currentView && requiredView === 'slider') // navigate in slider
+				&& (Math.abs(required - current) === 1
+					|| (current === itemsTotal - 1 && required === 0)
+					|| (required === itemsTotal - 1 && current === 0) ))) {
+			naturalRequest = true;
+		} else {
+			// User manually changed url or used backward / forward navigation
+			naturalRequest = false;
+		}
+
+		// launch suitable animated transition
+		if (requiredView === 'slider') {
+			if (firstRendering) {
+				classie.add(items[required], 'slide--current');
+			} else if (currentView === 'slider') {
+				if (naturalRequest) {
+					if (required - current === 1 || required - current === -itemsTotal + 1) {
+						navigate('right');
+					} else {
+						navigate('left');
+					}
+				} else {
+					switchSlide();
+				}
+			} else {
+				closeContent();
+				if (!naturalRequest) {
+					switchSlide();
+				}
+			}
+		} else {
+			if (firstRendering) {
+				classie.add(items[required], 'slide--current');
+				openItem(items[required]);
+			} else if (currentView === 'slider') {
+				if (!naturalRequest) {
+					switchSlide();
+				}
+				openItem(items[required]);
+			} else {
+				closeContent();
+				// workaround to wait until close animation is done
+				setTimeout(function() {
+					switchSlide();
+					openItem(items[required]);
+				}, 400);
+			}
+		}
+
+		// former required become new current
+		current = required;
+		currentView = requiredView;
+		currentContent = requiredContent;
+	}
+
+	// bind hash changes to router function
+	window.onhashchange = router;
+
 	init();
+
+	// first rendering has been done.
+	firstRendering = false;
 
 })(window);
