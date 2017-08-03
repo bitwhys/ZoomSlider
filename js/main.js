@@ -75,11 +75,10 @@
 		// required content id
 		requiredContent = currentContent,
 		// First time page is rendered
-		firstRendering = true;
+		firstRendering = true,
+		// going from N-1 to 0 or from O to N-1
+		loop = false;
 
-	// some helper functions:
-	function scrollX() { return window.pageXOffset || docElem.scrollLeft; }
-	function scrollY() { return window.pageYOffset || docElem.scrollTop; }
 	// from http://www.sberry.me/articles/javascript-event-throttling-debouncing
 	function throttle(fn, delay) {
 		var allowSample = true;
@@ -93,11 +92,44 @@
 		};
 	}
 
-	function init() {
-		// directly execute router for first rendering
-		router();
-		initEvents();
+	// applies the necessary transform value to scale the item up
+	function applyTransforms(el, nobodyscale) {
+		// zoomer area and scale value
+		var zoomerArea = el.querySelector('.zoomer__area'),
+			zoomerAreaSize = {width: zoomerArea.offsetWidth, height: zoomerArea.offsetHeight},
+			zoomerOffset = zoomerArea.getBoundingClientRect(),
+			scaleVal = zoomerAreaSize.width/zoomerAreaSize.height < win.width/win.height ? win.width/zoomerAreaSize.width : win.height/zoomerAreaSize.height;
+
+		if( bodyScale && !nobodyscale ) {
+			scaleVal /= bodyScale;
+		}
+
+		// apply transform
+		el.style.WebkitTransform = 'translate3d(' + Number(win.width/2 - (zoomerOffset.left+zoomerAreaSize.width/2)) + 'px,' + Number(win.height/2 - (zoomerOffset.top+zoomerAreaSize.height/2)) + 'px,0) scale3d(' + scaleVal + ',' + scaleVal + ',1)';
+		el.style.transform = 'translate3d(' + Number(win.width/2 - (zoomerOffset.left+zoomerAreaSize.width/2)) + 'px,' + Number(win.height/2 - (zoomerOffset.top+zoomerAreaSize.height/2)) + 'px,0) scale3d(' + scaleVal + ',' + scaleVal + ',1)';
 	}
+
+	// navRightCtrl event cb
+function navRightCtrlCB() {
+  if (current === itemsTotal - 1) {
+    loop = true;
+    window.location.hash = '#slider/' + contentList[0];
+  } else {
+    loop = false;
+    window.location.hash = '#slider/' + contentList[current + 1];
+  }
+}
+
+// navLeftCtrl event cb
+function navLeftCtrlCB() {
+  if (current === 0) {
+    loop = true;
+    window.location.hash = '#slider/' + contentList[itemsTotal - 1];
+  } else {
+    loop = false;
+    window.location.hash = '#slider/' + contentList[current - 1];
+  }
+}
 
 	// event binding
 	function initEvents() {
@@ -112,12 +144,8 @@
 		});
 
 		// navigation
-		navRightCtrl.addEventListener('click', function() {
-			window.location.hash = '#slider/' + contentList[current === itemsTotal - 1 ? 0 : current + 1];
-		});
-		navLeftCtrl.addEventListener('click', function() {
-			window.location.hash = '#slider/' + contentList[current === 0 ? itemsTotal - 1 : current - 1];
-		});
+		navRightCtrl.addEventListener('click', navRightCtrlCB);
+		navLeftCtrl.addEventListener('click', navLeftCtrlCB);
 
 		// window resize
 		window.addEventListener('resize', throttle(function(ev) {
@@ -138,11 +166,14 @@
 			if (!isOpen) {
 				switch (keyCode) {
 					case 37:
-						window.location.hash = '#slider/' + contentList[current === 0 ? itemsTotal - 1 : current - 1];
+						navLeftCtrlCB();
 						break;
 					case 39:
-						window.location.hash = '#slider/' + contentList[current === itemsTotal - 1 ? 0 : current + 1];
+						navRightCtrlCB();
 						break;
+					case 13:
+	          window.location.hash = '#zoom/' + currentContent;
+	          break;
 				}
 			} else {
 				switch (keyCode) {
@@ -152,6 +183,17 @@
 				}
 			}
 		} );
+	}
+
+	// disallow scrolling (on the scrollContainer)
+	function noscroll() {
+		if(!lockScroll) {
+			lockScroll = true;
+			xscroll = scrollContainer.scrollLeft;
+			yscroll = scrollContainer.scrollTop;
+		}
+		scrollContainer.scrollTop = yscroll;
+		scrollContainer.scrollLeft = xscroll;
 	}
 
 	// opens one item
@@ -253,23 +295,6 @@
 		});
 	}
 
-	// applies the necessary transform value to scale the item up
-	function applyTransforms(el, nobodyscale) {
-		// zoomer area and scale value
-		var zoomerArea = el.querySelector('.zoomer__area'),
-			zoomerAreaSize = {width: zoomerArea.offsetWidth, height: zoomerArea.offsetHeight},
-			zoomerOffset = zoomerArea.getBoundingClientRect(),
-			scaleVal = zoomerAreaSize.width/zoomerAreaSize.height < win.width/win.height ? win.width/zoomerAreaSize.width : win.height/zoomerAreaSize.height;
-
-		if( bodyScale && !nobodyscale ) {
-			scaleVal /= bodyScale;
-		}
-
-		// apply transform
-		el.style.WebkitTransform = 'translate3d(' + Number(win.width/2 - (zoomerOffset.left+zoomerAreaSize.width/2)) + 'px,' + Number(win.height/2 - (zoomerOffset.top+zoomerAreaSize.height/2)) + 'px,0) scale3d(' + scaleVal + ',' + scaleVal + ',1)';
-		el.style.transform = 'translate3d(' + Number(win.width/2 - (zoomerOffset.left+zoomerAreaSize.width/2)) + 'px,' + Number(win.height/2 - (zoomerOffset.top+zoomerAreaSize.height/2)) + 'px,0) scale3d(' + scaleVal + ',' + scaleVal + ',1)';
-	}
-
 	// navigate the slider
 	function navigate(dir) {
 		var itemCurrent = items[current],
@@ -279,8 +304,7 @@
 		// update new current value
 		if( dir === 'right' ) {
 			current = current < itemsTotal-1 ? current + 1 : 0;
-		}
-		else {
+		} else {
 			current = current > 0 ? current - 1 : itemsTotal-1;
 		}
 
@@ -330,17 +354,6 @@
 		});
 	}
 
-	// disallow scrolling (on the scrollContainer)
-	function noscroll() {
-		if(!lockScroll) {
-			lockScroll = true;
-			xscroll = scrollContainer.scrollLeft;
-			yscroll = scrollContainer.scrollTop;
-		}
-		scrollContainer.scrollTop = yscroll;
-		scrollContainer.scrollLeft = xscroll;
-	}
-
 	// Router will be executed everytime url changes
 	function router() {
 		// get request
@@ -357,29 +370,35 @@
 		}
 
 		// what are the requested view & content ?
-		if (query.length > 0) {
-			params = query.split('/');
-			// is the query relevant ?
-			if((params[0] === 'zoom' || params[0] === 'slider') && (contentList.indexOf(params[1]) > -1)) {
-				requiredView = params[0];
-				requiredContent = params[1];
-				required = contentList.indexOf(requiredContent);
-			} else {
-				// If the query is not relevant, reinit state & go back to default page
-				currentView = 'slider';
-				current = 0;
-				currentContent = contentList[0];
-				window.location.hash = currentView + '/' + currentContent;
-				return;
-			}
-		}
+	  if (query.length > 0) {
+	    params = query.split('/');
+	    // is the query relevant ?
+	    if ((params[0] === 'zoom' || params[0] === 'slider') && (contentList.indexOf(params[1]) > -1)) {
+	      requiredView = params[0];
+	      requiredContent = params[1];
+	      required = contentList.indexOf(requiredContent);
+	    } else {
+	      // If the query is not relevant, reinit state & go back to default page
+	      currentView = 'slider';
+	      current = 0;
+	      currentContent = contentList[0];
+	      window.location.hash = `${currentView}/${currentContent}`;
+	      return;
+	    }
+	  } else {
+	    requiredView = 'slider';
+	    requiredContent = contentList[0];
+	    required = 0;
+	  }
 
 		// Identify if request is triggered by supported event or else from a direct browser interaction ?
-		if ((requiredView !== currentView && current === required) || // open items or close content action ?
-			((requiredView === currentView && requiredView === 'slider') // navigate in slider
-				&& (Math.abs(required - current) === 1
-					|| (current === itemsTotal - 1 && required === 0)
-					|| (required === itemsTotal - 1 && current === 0) ))) {
+	  // open items or close content action ?
+	  if ((requiredView !== currentView && current === required) ||
+	    // navigate in slider
+	    ((requiredView === currentView && requiredView === 'slider')
+	      && (Math.abs(required - current) === 1
+	        || (current === itemsTotal - 1 && required === 0)
+	        || (required === itemsTotal - 1 && current === 0)))) {
 			naturalRequest = true;
 		} else {
 			// User manually changed url or used backward / forward navigation
@@ -392,8 +411,9 @@
 				classie.add(items[required], 'slide--current');
 			} else if (currentView === 'slider') {
 				if (naturalRequest) {
-					if (required - current === 1 || required - current === -itemsTotal + 1) {
-						navigate('right');
+					if ((required - current === 1 && (!loop || loop === undefined))
+	          || (required - current === -itemsTotal + 1 && (loop || loop === undefined))) {
+	          navigate('right');
 					} else {
 						navigate('left');
 					}
@@ -406,33 +426,38 @@
 					switchSlide();
 				}
 			}
-		} else {
-			if (firstRendering) {
-				classie.add(items[required], 'slide--current');
-				openItem(items[required]);
-			} else if (currentView === 'slider') {
-				if (!naturalRequest) {
-					switchSlide();
-				}
-				openItem(items[required]);
-			} else {
-				closeContent();
-				// workaround to wait until close animation is done
-				setTimeout(function() {
-					switchSlide();
-					openItem(items[required]);
-				}, 400);
+		} else if (firstRendering) {
+			classie.add(items[required], 'slide--current');
+			openItem(items[required]);
+		} else if (currentView === 'slider') {
+			if (!naturalRequest) {
+				switchSlide();
 			}
+			openItem(items[required]);
+		} else {
+			closeContent();
+			// workaround to wait until close animation is done
+			setTimeout(function() {
+				switchSlide();
+				openItem(items[required]);
+			}, 400);
 		}
 
 		// former required become new current
 		current = required;
 		currentView = requiredView;
 		currentContent = requiredContent;
+		loop = undefined;
 	}
 
 	// bind hash changes to router function
 	window.onhashchange = router;
+
+	function init() {
+		// directly execute router for first rendering
+		router();
+		initEvents();
+	}
 
 	init();
 
